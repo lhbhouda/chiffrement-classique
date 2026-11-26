@@ -1,183 +1,172 @@
 #!/usr/bin/env python3
 
 
-import random
-import string
-
-ALPHABET = string.ascii_lowercase  # "abcdefghijklmnopqrstuvwxyz"
+ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 # ----------------------------------------------------------------------
-# 1) CÉSAR : on décale chaque lettre de "cle" positions
+# Outil : mettre un texte au format A-Z
 # ----------------------------------------------------------------------
-def cesar_chiffrer(texte, cle):
+def nettoyer(texte):
+    """Majuscules, accents retirés, on ne garde que A-Z."""
+    accents = {"É": "E", "È": "E", "Ê": "E", "Ë": "E", "À": "A", "Â": "A",
+               "Ä": "A", "Î": "I", "Ï": "I", "Ô": "O", "Ö": "O", "Ù": "U",
+               "Û": "U", "Ü": "U", "Ç": "C"}
     resultat = ""
-    for c in texte:
-        if c.isascii() and c.isalpha():
-            base = ord('A') if c.isupper() else ord('a')
-            resultat += chr((ord(c) - base + cle) % 26 + base)
-        else:
-            resultat += c  # espaces, chiffres, ponctuation : inchangés
+    for c in texte.upper():
+        c = accents.get(c, c)
+        if c in ALPHABET:
+            resultat += c
     return resultat
 
 
-def cesar_dechiffrer(texte, cle):
-    return cesar_chiffrer(texte, -cle)
+# ----------------------------------------------------------------------
+# 1) CÉSAR : C = (M + k) mod 26
+# ----------------------------------------------------------------------
+def cesar_chiffrer(message, k):
+    resultat = ""
+    for c in message:
+        m = ALPHABET.index(c)
+        resultat += ALPHABET[(m + k) % 26]
+    return resultat
 
 
-def cesar_force_brute(texte):
-    """Essaie les 26 clés possibles et affiche chaque résultat."""
-    for cle in range(26):
-        print(f"Clé {cle:2d} : {cesar_dechiffrer(texte, cle)}")
+def cesar_dechiffrer(message, k):
+    return cesar_chiffrer(message, -k)
+
+
+def cesar_force_brute(message):
+    """Teste les 25 clés (1 à 25) et renvoie la liste (clé, texte)."""
+    return [(k, cesar_dechiffrer(message, k)) for k in range(1, 26)]
 
 
 # ----------------------------------------------------------------------
-# 2) SUBSTITUTION : chaque lettre est remplacée par une autre
-#    La clé est un "alphabet mélangé" de 26 lettres (ex: qwertyuiopasdfghjklzxcvbnm)
+# 2) SUBSTITUTION : A -> 1re lettre de la clé, B -> 2e, etc.
 # ----------------------------------------------------------------------
 def cle_substitution_valide(cle):
-    return len(cle) == 26 and sorted(cle.lower()) == list(ALPHABET)
+    return len(cle) == 26 and sorted(cle) == list(ALPHABET)
 
 
-def generer_cle_substitution():
-    lettres = list(ALPHABET)
-    random.shuffle(lettres)
-    return "".join(lettres)
-
-
-def substitution_chiffrer(texte, cle):
+def substitution_chiffrer(message, cle):
     resultat = ""
-    for c in texte:
-        if c.isascii() and c.isalpha():
-            nouvelle = cle[ALPHABET.index(c.lower())]
-            resultat += nouvelle.upper() if c.isupper() else nouvelle
-        else:
-            resultat += c
+    for c in message:
+        resultat += cle[ALPHABET.index(c)]
     return resultat
 
 
-def substitution_dechiffrer(texte, cle):
+def substitution_dechiffrer(message, cle):
     resultat = ""
-    for c in texte:
-        if c.isascii() and c.isalpha():
-            ancienne = ALPHABET[cle.index(c.lower())]
-            resultat += ancienne.upper() if c.isupper() else ancienne
-        else:
-            resultat += c
+    for c in message:
+        resultat += ALPHABET[cle.index(c)]
     return resultat
 
 
 # ----------------------------------------------------------------------
-# 3) TRANSPOSITION (par colonnes) : la clé = nombre de colonnes
-#    On lit le texte colonne par colonne.
-#    Ex: "BONJOUR" avec clé 3 -> colonnes : B-J-R / O-O / N-U -> "BJROONU"
+# 3) TRANSPOSITION PAR COLONNES avec mot-clé
+#    - message écrit en lignes sous le mot-clé (dernière ligne complétée par X)
+#    - colonnes numérotées dans l'ordre alphabétique des lettres du mot-clé
+#    - lecture de chaque colonne de haut en bas, dans cet ordre
 # ----------------------------------------------------------------------
-def transposition_chiffrer(texte, cle):
+def ordre_colonnes(mot_cle):
+    """Renvoie les indices des colonnes dans l'ordre alphabétique du mot-clé.
+    Si une lettre est répétée, la plus à gauche passe en premier."""
+    return sorted(range(len(mot_cle)), key=lambda i: (mot_cle[i], i))
+
+
+def transposition_chiffrer(message, mot_cle):
+    n_col = len(mot_cle)
+    while len(message) % n_col != 0:
+        message += "X"
     resultat = ""
-    for col in range(cle):
-        resultat += texte[col::cle]  # une lettre sur "cle", à partir de col
+    for col in ordre_colonnes(mot_cle):
+        resultat += message[col::n_col]  # colonne de haut en bas
     return resultat
 
 
-def transposition_dechiffrer(texte, cle):
-    n = len(texte)
-    resultat = [""] * n
+def transposition_dechiffrer(message, mot_cle):
+    n_col = len(mot_cle)
+    n_lig = len(message) // n_col
+    lignes_cols = [""] * n_col          # contenu de chaque colonne d'origine
     pos = 0
-    for col in range(cle):
-        for i in range(col, n, cle):
-            resultat[i] = texte[pos]
-            pos += 1
-    return "".join(resultat)
+    for col in ordre_colonnes(mot_cle):
+        lignes_cols[col] = message[pos:pos + n_lig]
+        pos += n_lig
+    resultat = ""
+    for i in range(n_lig):              # on relit ligne par ligne
+        for col in range(n_col):
+            resultat += lignes_cols[col][i]
+    return resultat
 
 
 # ----------------------------------------------------------------------
-# Fonctions utilitaires pour le menu
+# Interface terminal
 # ----------------------------------------------------------------------
-def demander_entier(message, minimum=None, maximum=None):
+def demander_entier(message):
     while True:
         try:
-            valeur = int(input(message))
-            if minimum is not None and valeur < minimum:
-                print(f"  -> La valeur doit être >= {minimum}")
-            elif maximum is not None and valeur > maximum:
-                print(f"  -> La valeur doit être <= {maximum}")
-            else:
-                return valeur
+            return int(input(message))
         except ValueError:
             print("  -> Entre un nombre entier.")
 
 
-def demander_cle_substitution(mode):
+def demander_texte(message):
     while True:
-        if mode == "chiffrer":
-            cle = input("Clé (26 lettres uniques) ou ENTRÉE pour en générer une : ").lower()
-            if cle == "":
-                cle = generer_cle_substitution()
-                print("Clé générée (GARDE-LA pour déchiffrer) :", cle)
-                return cle
-        else:
-            cle = input("Clé (26 lettres uniques) : ").lower()
+        texte = nettoyer(input(message))
+        if texte:
+            return texte
+        print("  -> Texte vide (seules les lettres A-Z sont gardées).")
+
+
+def demander_cle_substitution():
+    while True:
+        cle = nettoyer(input("Clé (26 lettres uniques) : "))
         if cle_substitution_valide(cle):
             return cle
-        print("  -> Clé invalide : il faut les 26 lettres de l'alphabet, chacune une seule fois.")
-
-
-def traiter(algo, mode):
-    texte = input("Texte : ")
-
-    if algo == "1":  # César
-        cle = demander_entier("Clé (décalage 0-25) : ", 0, 25)
-        if mode == "chiffrer":
-            print("Résultat :", cesar_chiffrer(texte, cle))
-        else:
-            print("Résultat :", cesar_dechiffrer(texte, cle))
-
-    elif algo == "2":  # Substitution
-        cle = demander_cle_substitution(mode)
-        if mode == "chiffrer":
-            print("Résultat :", substitution_chiffrer(texte, cle))
-        else:
-            print("Résultat :", substitution_dechiffrer(texte, cle))
-
-    elif algo == "3":  # Transposition
-        cle = demander_entier("Clé (nombre de colonnes >= 2) : ", 2)
-        if mode == "chiffrer":
-            print("Résultat :", transposition_chiffrer(texte, cle))
-        else:
-            print("Résultat :", transposition_dechiffrer(texte, cle))
+        print("  -> Il faut les 26 lettres de l'alphabet, chacune une seule fois.")
 
 
 def main():
     while True:
-        print("\n===== CHIFFREMENT CLASSIQUE =====")
+        print("\n===== CRYPTOBOX - BRIQUE 1 =====")
         print("1. César")
         print("2. Substitution")
-        print("3. Transposition")
+        print("3. Transposition (mot-clé)")
         print("4. Force brute sur César")
         print("0. Quitter")
-        algo = input("Ton choix : ").strip()
+        choix = input("Ton choix : ").strip()
 
-        if algo == "0":
+        if choix == "0":
             print("Au revoir !")
             break
 
-        elif algo == "4":
-            texte = input("Texte chiffré à casser : ")
-            cesar_force_brute(texte)
+        if choix == "4":
+            message = demander_texte("Texte chiffré : ")
+            for k, texte in cesar_force_brute(message):
+                print(f"k = {k:2d} : {texte}")
+            continue
 
-        elif algo in ("1", "2", "3"):
-            print("a. Chiffrer")
-            print("b. Déchiffrer")
-            action = input("Ton choix : ").strip().lower()
-            if action == "a":
-                traiter(algo, "chiffrer")
-            elif action == "b":
-                traiter(algo, "dechiffrer")
-            else:
-                print("Choix invalide.")
-
-        else:
+        if choix not in ("1", "2", "3"):
             print("Choix invalide.")
+            continue
+
+        action = input("a. Chiffrer   b. Déchiffrer : ").strip().lower()
+        if action not in ("a", "b"):
+            print("Choix invalide.")
+            continue
+        message = demander_texte("Message : ")
+
+        if choix == "1":
+            k = demander_entier("Clé k : ")
+            f = cesar_chiffrer if action == "a" else cesar_dechiffrer
+            print("Résultat :", f(message, k))
+        elif choix == "2":
+            cle = demander_cle_substitution()
+            f = substitution_chiffrer if action == "a" else substitution_dechiffrer
+            print("Résultat :", f(message, cle))
+        else:
+            mot_cle = demander_texte("Mot-clé : ")
+            f = transposition_chiffrer if action == "a" else transposition_dechiffrer
+            print("Résultat :", f(message, mot_cle))
 
 
 if __name__ == "__main__":
